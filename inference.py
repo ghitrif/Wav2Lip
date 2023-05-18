@@ -7,6 +7,8 @@ from glob import glob
 import torch, face_detection
 from models import Wav2Lip
 import platform
+import fnmatch
+
 
 parser = argparse.ArgumentParser(description='Inference code to lip-sync videos in the wild using Wav2Lip models')
 
@@ -111,6 +113,8 @@ def datagen(frames, mels):
 	if args.box[0] == -1:
 		if not args.static:
 			face_det_results = face_detect(frames) # BGR2RGB for CNN face detection
+			print("face_det_results")
+			print(face_det_results)
 		else:
 			face_det_results = face_detect([frames[0]])
 	else:
@@ -179,38 +183,31 @@ def load_model(path):
 	return model.eval()
 
 def main():
-	if not os.path.isfile(args.face):
-		raise ValueError('--face argument must be a valid path to video/image file')
+	video_stream = cv2.VideoCapture(args.face)
+	fps = 25
 
-	elif args.face.split('.')[1] in ['jpg', 'png', 'jpeg']:
-		full_frames = [cv2.imread(args.face)]
-		fps = args.fps
+	print('Reading video frames...')
 
-	else:
-		video_stream = cv2.VideoCapture(args.face)
-		fps = video_stream.get(cv2.CAP_PROP_FPS)
+	full_frames = []
+	d = "/content/sample_data/images/"
+	countImage = count = len(fnmatch.filter(os.listdir(d), '*.png'))
+	bb = 1
+	while bb <= countImage:
+		frame = cv2.imread(os.path.join(d,str(bb)+".png"))
+		if args.resize_factor > 1:
+			frame = cv2.resize(frame, (frame.shape[1]//args.resize_factor, frame.shape[0]//args.resize_factor))
 
-		print('Reading video frames...')
+		if args.rotate:
+			frame = cv2.rotate(frame, cv2.cv2.ROTATE_90_CLOCKWISE)
 
-		full_frames = []
-		while 1:
-			still_reading, frame = video_stream.read()
-			if not still_reading:
-				video_stream.release()
-				break
-			if args.resize_factor > 1:
-				frame = cv2.resize(frame, (frame.shape[1]//args.resize_factor, frame.shape[0]//args.resize_factor))
+		y1, y2, x1, x2 = args.crop
+		if x2 == -1: x2 = frame.shape[1]
+		if y2 == -1: y2 = frame.shape[0]
 
-			if args.rotate:
-				frame = cv2.rotate(frame, cv2.cv2.ROTATE_90_CLOCKWISE)
+		frame = frame[y1:y2, x1:x2]
 
-			y1, y2, x1, x2 = args.crop
-			if x2 == -1: x2 = frame.shape[1]
-			if y2 == -1: y2 = frame.shape[0]
-
-			frame = frame[y1:y2, x1:x2]
-
-			full_frames.append(frame)
+		full_frames.append(frame)
+		bb += 1
 
 	print ("Number of frames available for inference: "+str(len(full_frames)))
 
